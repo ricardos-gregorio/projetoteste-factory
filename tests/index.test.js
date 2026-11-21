@@ -7,7 +7,7 @@ const HTML_URL = new URL('../index.html', import.meta.url);
 const CSS_URL = new URL('../css/styles.css', import.meta.url);
 const PKG_URL = new URL('../package.json', import.meta.url);
 
-const stripBom = (s) => s.replace(/^﻿/, '');
+const stripBom = (s) => s.replace(/^\uFEFF/, '');
 const readText = (url) => stripBom(fs.readFileSync(url, 'utf8'));
 
 const rawHtml = fs.existsSync(HTML_URL) ? readText(HTML_URL) : '';
@@ -180,7 +180,7 @@ describe('página de boas-vindas', () => {
 
 describe('casos de borda e de erro dos verificadores', () => {
   test('CA-1: doctype tolera BOM, espaços e caixa; rejeita ausência ou doctype antigo', () => {
-    assert.ok(checks.doctype('﻿<!DOCTYPE html><html></html>'));
+    assert.ok(checks.doctype('\uFEFF<!DOCTYPE html><html></html>'));
     assert.ok(checks.doctype('\n  <!doctype HTML>'));
     assert.equal(checks.doctype('<html></html>'), false);
     assert.equal(checks.doctype('<!-- c --><!DOCTYPE html>'), false);
