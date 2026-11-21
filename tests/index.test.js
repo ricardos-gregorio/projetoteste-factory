@@ -88,6 +88,18 @@ const checks = {
   },
   stylesheetLinked: (doc) =>
     Boolean(doc.head.querySelector('link[rel~="stylesheet"][href="css/styles.css"]')),
+  navLinksValid: (doc) => {
+    const links = [...doc.querySelectorAll('header nav a')]
+      .map((a) => [a.textContent.trim(), a.getAttribute('href')]);
+    return JSON.stringify(links) ===
+      JSON.stringify([['Início', '#inicio'], ['Destaques', '#destaques'], ['Contato', '#contato']]);
+  },
+  footerIsContato: (doc) => doc.querySelector('footer')?.id === 'contato',
+  requiredCardTitles: (doc) => {
+    const titles = [...doc.querySelectorAll('#destaques .card')]
+      .map((c) => (c.querySelector('h2, h3')?.textContent ?? '').trim());
+    return ['Carros novos', 'Seminovos', 'Financiamento'].every((t) => titles.includes(t));
+  },
   packageConfig: (pkg) =>
     pkg?.type === 'module' &&
     /\bnode\s+--test\b/.test(pkg?.scripts?.test ?? '') &&
@@ -138,6 +150,7 @@ describe('página de boas-vindas', () => {
   test('CA-6: exatamente um h1 com mensagem de boas-vindas', () => {
     assert.equal(document.querySelectorAll('h1').length, 1);
     assert.match(document.querySelector('h1').textContent, WELCOME_RE);
+    assert.ok(checks.singleWelcomeH1(document));
   });
 
   test('CA-7: landmarks header, nav, main e footer presentes exatamente uma vez', () => {
@@ -155,6 +168,7 @@ describe('página de boas-vindas', () => {
     for (const el of ctas) {
       if (el.tagName === 'A') assert.equal(el.getAttribute('href'), '#destaques');
     }
+    assert.ok(checks.ctaValid(document));
   });
 
   test('CA-9: #destaques possui ao menos 3 cards, cada um com título não vazio', () => {
@@ -167,6 +181,8 @@ describe('página de boas-vindas', () => {
       assert.ok(title, `card ${i + 1} sem título h2/h3`);
       assert.ok(title.textContent.trim().length > 0, `card ${i + 1} com título vazio`);
     });
+    assert.ok(checks.destaquesCardsValid(document));
+    assert.ok(checks.requiredCardTitles(document), 'cards Carros novos/Seminovos/Financiamento ausentes');
   });
 
   test('CA-10: nenhum link âncora interno quebrado', () => {
@@ -189,6 +205,8 @@ describe('página de boas-vindas', () => {
       assert.ok(cardTitles.includes(t), `card "${t}" ausente`);
     }
     assert.equal(document.querySelector('footer')?.id, 'contato', 'o rodapé deve ter id="contato"');
+    assert.ok(checks.navLinksValid(document), 'nav deve ter Início/Destaques/Contato com hrefs corretos');
+    assert.ok(checks.footerIsContato(document));
   });
 
   test('CA-11: stylesheet css/styles.css referenciada, existente e não vazia', () => {
@@ -209,6 +227,7 @@ describe('página de boas-vindas', () => {
     assert.ok(checks.imgsHaveAlt(document), 'há <img> sem atributo alt');
     assert.equal(document.querySelectorAll('script').length, 0, 'a página não deve conter <script>');
     assert.equal(document.querySelectorAll('[style]').length, 0, 'a página não deve conter style="" inline');
+    assert.ok(checks.noScriptNoInlineStyle(document));
   });
 
   test('CA-14: footer contém © ou "direitos"', () => {
@@ -267,6 +286,8 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.ok(checks.doctype('\n  <!doctype HTML>'));
     assert.equal(checks.doctype('<html></html>'), false);
     assert.equal(checks.doctype('<!-- c --><!DOCTYPE html>'), false);
+    assert.equal(checks.doctype('texto<!DOCTYPE html>'), false);
+    assert.equal(checks.doctype(''), false);
     assert.equal(checks.doctype('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN">'), false);
   });
 
@@ -324,6 +345,36 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.internalAnchors(parse(page('<div id="a"></div><a href="#a">a</a>'))).length, 1);
     assert.deepEqual(checks.duplicateIds(parse(page('<div id="a"></div><p id="a"></p><p id="b"></p>'))), ['a']);
     assert.deepEqual(checks.duplicateIds(parse(page('<div id="a"></div><p id="b"></p>'))), []);
+  });
+
+  test('CA-10: navegação exige Início, Destaques e Contato nessa ordem e rodapé com id="contato"', () => {
+    const li = (t, h) => `<a href="${h}">${t}</a>`;
+    const nav = (inner) => page(`<header><nav>${inner}</nav></header>`);
+    const ok = li('Início', '#inicio') + li('Destaques', '#destaques') + li('Contato', '#contato');
+    assert.ok(checks.navLinksValid(parse(nav(ok))));
+    assert.equal(checks.navLinksValid(parse(nav(
+      li('Destaques', '#destaques') + li('Início', '#inicio') + li('Contato', '#contato')))), false);
+    assert.equal(checks.navLinksValid(parse(nav(li('Início', '#inicio') + li('Destaques', '#destaques')))), false);
+    assert.equal(checks.navLinksValid(parse(nav(ok + li('Blog', '#blog')))), false);
+    assert.equal(checks.navLinksValid(parse(nav(
+      li('Início', '#inicio') + li('Destaques', '#outro') + li('Contato', '#contato')))), false);
+    assert.equal(checks.navLinksValid(parse(page(`<nav>${ok}</nav>`))), false);
+    assert.ok(checks.footerIsContato(parse(page('<footer id="contato"></footer>'))));
+    assert.equal(checks.footerIsContato(parse(page('<footer></footer><div id="contato"></div>'))), false);
+    assert.equal(checks.footerIsContato(parse(page(''))), false);
+  });
+
+  test('CA-9: exige os títulos Carros novos, Seminovos e Financiamento', () => {
+    const card = (t) => `<div class="card"><h3>${t}</h3></div>`;
+    const section = (inner) => page(`<section id="destaques">${inner}</section>`);
+    assert.ok(checks.requiredCardTitles(parse(section(
+      card('Carros novos') + card('Seminovos') + card('Financiamento')))));
+    assert.equal(checks.requiredCardTitles(parse(section(
+      card('Carros novos') + card('Seminovos') + card('Consórcio')))), false);
+    assert.equal(checks.requiredCardTitles(parse(page(
+      card('Carros novos') + card('Seminovos') + card('Financiamento')))), false);
+    assert.equal(checks.requiredCardTitles(parse(section(
+      card('Carros novos') + card('Seminovos') + '<div class="card"><p>Financiamento</p></div>'))), false);
   });
 
   test('CA-11: rejeita stylesheet ausente, com outro href ou rel diferente', () => {
