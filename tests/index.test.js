@@ -63,7 +63,8 @@ const checks = {
     const footer = doc.querySelector('footer');
     return Boolean(footer && /©|direitos/i.test(footer.textContent));
   },
-  mediaMinWidth: (css) => /@media[^{]*min-width/i.test(css),
+  // Remove comentários antes do match para evitar falso positivo com @media comentada.
+  mediaMinWidth: (css) => /@media[^{]*min-width/i.test(css.replace(/\/\*[\s\S]*?\*\//g, '')),
   langPtBR: (doc) => doc.documentElement.getAttribute('lang') === 'pt-BR',
   charsetAndViewport: (doc) => {
     const charset = doc.head.querySelector('meta[charset]');
@@ -452,6 +453,23 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.ok(checks.imgsHaveAlt(parse(page('<img src="a.png" alt>'))));
     assert.equal(checks.imgsHaveAlt(parse(page('<img src="a.png" alt="ok"><img src="b.png">'))), false);
     assert.ok(checks.imgsHaveAlt(parse(page('<p>sem imagens</p>'))));
+  });
+
+  test('CA-12 (borda): @media min-width comentada não conta; comentário não esconde @media válida', () => {
+    assert.equal(checks.mediaMinWidth('/* @media (min-width: 768px) { a {} } */ .x { color: red; }'), false);
+    assert.equal(checks.mediaMinWidth('/*\n@media (min-width: 768px) {\n}\n*/\n@media print { a {} }'), false);
+    assert.equal(checks.mediaMinWidth('@media /* tela */ (max-width: 600px) { a {} } /* min-width */'), false);
+    assert.ok(checks.mediaMinWidth('/* desktop */\n@media (min-width: 768px) { a {} }'));
+    assert.ok(checks.mediaMinWidth('@media /* tela */ screen and (min-width: 48em) { a {} }'));
+    assert.ok(checks.mediaMinWidth('@media (max-width: 1200px) and (min-width: 768px) { a {} }'));
+  });
+
+  test('CA-6/CA-8 (borda): CTA só conta em a/button e h1 vazio é rejeitado', () => {
+    // O CTA não deve ser confundido com o título dos cards: só a/button contam.
+    assert.equal(checks.ctaValid(parse(page('<h3>Ver carros</h3>'))), false);
+    assert.equal(checks.ctaValid(parse(page('<span>Ver carros</span><a href="#destaques">x</a>'))), false);
+    // h1 vazio ou com só espaços não satisfaz boas-vindas.
+    assert.equal(checks.singleWelcomeH1(parse(page('<main><h1>   </h1></main>'))), false);
   });
 
   test('CA-15: rejeita package.json sem type module, sem node --test ou sem jsdom em devDependencies', () => {
