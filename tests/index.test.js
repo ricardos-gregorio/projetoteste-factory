@@ -60,6 +60,38 @@ const checks = {
     return Boolean(footer && /©|direitos/i.test(footer.textContent));
   },
   mediaMinWidth: (css) => /@media[^{]*min-width/i.test(css),
+  langPtBR: (doc) => doc.documentElement.getAttribute('lang') === 'pt-BR',
+  charsetAndViewport: (doc) => {
+    const charset = doc.head.querySelector('meta[charset]');
+    const viewport = doc.head.querySelector('meta[name="viewport"]');
+    return Boolean(charset && charset.getAttribute('charset').trim().toLowerCase() === 'utf-8' &&
+      viewport && /width\s*=\s*device-width/i.test(viewport.getAttribute('content') ?? ''));
+  },
+  titleValid: (doc) => {
+    const title = (doc.querySelector('head > title')?.textContent ?? '').trim();
+    if (!title) return false;
+    const brand = (doc.querySelector('header .brand')?.textContent ?? '').trim();
+    return /carros?/i.test(title) ||
+      (brand.length > 0 && title.toLowerCase().includes(brand.toLowerCase()));
+  },
+  descriptionValid: (doc) => {
+    const meta = doc.head.querySelector('meta[name="description"]');
+    const content = (meta?.getAttribute('content') ?? '').trim();
+    return content.length > 0 && /carro/i.test(content);
+  },
+  landmarksNested: (doc) => Boolean(doc.querySelector('header nav') && doc.querySelector('main h1')),
+  internalAnchors: (doc) =>
+    [...doc.querySelectorAll('a[href^="#"]')].filter((a) => a.getAttribute('href') !== '#'),
+  duplicateIds: (doc) => {
+    const ids = [...doc.querySelectorAll('[id]')].map((el) => el.id);
+    return [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  },
+  stylesheetLinked: (doc) =>
+    Boolean(doc.head.querySelector('link[rel~="stylesheet"][href="css/styles.css"]')),
+  packageConfig: (pkg) =>
+    pkg?.type === 'module' &&
+    /\bnode\s+--test\b/.test(pkg?.scripts?.test ?? '') &&
+    Boolean(pkg?.devDependencies?.jsdom),
 };
 
 const page = (body, head = '') =>
@@ -73,6 +105,7 @@ describe('página de boas-vindas', () => {
 
   test('CA-2: <html> possui lang="pt-BR"', () => {
     assert.equal(document.documentElement.getAttribute('lang'), 'pt-BR');
+    assert.ok(checks.langPtBR(document));
   });
 
   test('CA-3: <head> tem meta charset UTF-8 e meta viewport com width=device-width', () => {
@@ -83,15 +116,14 @@ describe('página de boas-vindas', () => {
     const viewport = document.head.querySelector('meta[name="viewport"]');
     assert.ok(viewport, 'meta viewport ausente');
     assert.match(viewport.getAttribute('content') ?? '', /width\s*=\s*device-width/);
+    assert.ok(checks.charsetAndViewport(document));
   });
 
   test('CA-4: <title> não vazio e menciona carro(s) ou o nome do site', () => {
     const title = document.title.trim();
     assert.ok(title.length > 0, 'title vazio');
-    const brandEl = document.querySelector('header .brand') ?? document.querySelector('header');
-    const brand = brandEl?.textContent.trim().split(/\s+/)[0] ?? '';
-    const mentionsBrand = brand.length > 0 && title.toLowerCase().includes(brand.toLowerCase());
-    assert.ok(/carros?/i.test(title) || mentionsBrand, `title "${title}" não menciona carros nem a marca`);
+    assert.ok(document.querySelector('header .brand'), 'marca (header .brand) ausente');
+    assert.ok(checks.titleValid(document), `title "${title}" não menciona carros nem a marca`);
   });
 
   test('CA-5: meta description não vazia e mencionando carros', () => {
@@ -100,6 +132,7 @@ describe('página de boas-vindas', () => {
     const content = (desc.getAttribute('content') ?? '').trim();
     assert.ok(content.length > 0, 'meta description vazia');
     assert.match(content, /carro/i);
+    assert.ok(checks.descriptionValid(document));
   });
 
   test('CA-6: exatamente um h1 com mensagem de boas-vindas', () => {
@@ -113,6 +146,7 @@ describe('página de boas-vindas', () => {
     }
     assert.ok(document.querySelector('header nav'), '<nav> deve ficar dentro do <header>');
     assert.ok(document.querySelector('main h1'), 'o <h1> deve ficar dentro do <main>');
+    assert.ok(checks.landmarksOnce(document) && checks.landmarksNested(document));
   });
 
   test('CA-8: CTA "Ver carros" aponta para #destaques', () => {
@@ -138,13 +172,23 @@ describe('página de boas-vindas', () => {
   test('CA-10: nenhum link âncora interno quebrado', () => {
     const anchors = document.querySelectorAll('a[href^="#"]');
     assert.ok(anchors.length > 0, 'esperado ao menos um link âncora interno (nav/CTA)');
+    assert.ok(checks.internalAnchors(document).length > 0, 'esperado ao menos um link âncora além de href="#"');
     assert.deepEqual(checks.brokenAnchors(document), []);
   });
 
   test('CA-10 (borda): ids da página são únicos (âncoras não ambíguas)', () => {
-    const ids = [...document.querySelectorAll('[id]')].map((el) => el.id);
-    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
-    assert.deepEqual(dupes, []);
+    assert.deepEqual(checks.duplicateIds(document), []);
+  });
+
+  test('Escopo: navegação, cards e rodapé conforme a spec', () => {
+    const navTexts = [...document.querySelectorAll('header nav a')].map((a) => a.textContent.trim());
+    assert.deepEqual(navTexts, ['Início', 'Destaques', 'Contato']);
+    const cardTitles = [...document.querySelectorAll('#destaques .card')]
+      .map((c) => c.querySelector('h2, h3').textContent.trim());
+    for (const t of ['Carros novos', 'Seminovos', 'Financiamento']) {
+      assert.ok(cardTitles.includes(t), `card "${t}" ausente`);
+    }
+    assert.equal(document.querySelector('footer')?.id, 'contato', 'o rodapé deve ter id="contato"');
   });
 
   test('CA-11: stylesheet css/styles.css referenciada, existente e não vazia', () => {
@@ -152,6 +196,7 @@ describe('página de boas-vindas', () => {
       document.head.querySelector('link[rel="stylesheet"][href="css/styles.css"]'),
       '<link rel="stylesheet" href="css/styles.css"> ausente',
     );
+    assert.ok(checks.stylesheetLinked(document));
     assert.ok(fs.existsSync(CSS_URL), 'css/styles.css não existe');
     assert.ok(rawCss.trim().length > 0, 'css/styles.css está vazio');
   });
@@ -175,10 +220,48 @@ describe('página de boas-vindas', () => {
     assert.equal(pkg.type, 'module');
     assert.match(pkg.scripts?.test ?? '', /node --test/);
     assert.ok(pkg.devDependencies?.jsdom, 'jsdom deve ser devDependency');
+    assert.ok(checks.packageConfig(pkg));
   });
 });
 
 describe('casos de borda e de erro dos verificadores', () => {
+  test('CA-2: rejeita lang ausente ou diferente de pt-BR', () => {
+    assert.ok(checks.langPtBR(parse(page(''))));
+    assert.equal(checks.langPtBR(parse('<!DOCTYPE html><html><body></body></html>')), false);
+    assert.equal(checks.langPtBR(parse('<!DOCTYPE html><html lang="en"><body></body></html>')), false);
+    assert.equal(checks.langPtBR(parse('<!DOCTYPE html><html lang="pt"><body></body></html>')), false);
+  });
+
+  test('CA-3: rejeita charset ausente/não UTF-8 e viewport ausente ou sem width=device-width', () => {
+    const vp = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+    assert.ok(checks.charsetAndViewport(parse(page('', '<meta charset="UTF-8">' + vp))));
+    assert.ok(checks.charsetAndViewport(parse(page('', '<meta charset="utf-8">' + vp))));
+    assert.equal(checks.charsetAndViewport(parse(page('', vp))), false);
+    assert.equal(checks.charsetAndViewport(parse(page('', '<meta charset="ISO-8859-1">' + vp))), false);
+    assert.equal(checks.charsetAndViewport(parse(page('', '<meta charset="UTF-8">'))), false);
+    assert.equal(checks.charsetAndViewport(parse(page('',
+      '<meta charset="UTF-8"><meta name="viewport" content="initial-scale=1">'))), false);
+  });
+
+  test('CA-4: rejeita title ausente, vazio ou sem carros/marca; aceita a marca do cabeçalho', () => {
+    const header = '<header><a class="brand">MinhaLoja</a></header>';
+    assert.equal(checks.titleValid(parse(page(header))), false);
+    assert.equal(checks.titleValid(parse(page(header, '<title>   </title>'))), false);
+    assert.equal(checks.titleValid(parse(page(header, '<title>Página inicial</title>'))), false);
+    assert.equal(checks.titleValid(parse(page('', '<title>Página inicial</title>'))), false);
+    assert.ok(checks.titleValid(parse(page(header, '<title>MinhaLoja - Início</title>'))));
+    assert.ok(checks.titleValid(parse(page('', '<title>Venda de Carro</title>'))));
+  });
+
+  test('CA-5: rejeita description ausente, vazia ou sem "carro"', () => {
+    const meta = (c) => `<meta name="description" content="${c}">`;
+    assert.equal(checks.descriptionValid(parse(page(''))), false);
+    assert.equal(checks.descriptionValid(parse(page('', meta('  ')))), false);
+    assert.equal(checks.descriptionValid(parse(page('', meta('Loja de motos')))), false);
+    assert.equal(checks.descriptionValid(parse(page('', '<meta name="description">'))), false);
+    assert.ok(checks.descriptionValid(parse(page('', meta('Os melhores CARROS')))));
+  });
+
   test('CA-1: doctype tolera BOM, espaços e caixa; rejeita ausência ou doctype antigo', () => {
     assert.ok(checks.doctype('\uFEFF<!DOCTYPE html><html></html>'));
     assert.ok(checks.doctype('\n  <!doctype HTML>'));
@@ -201,6 +284,13 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.ok(checks.landmarksOnce(parse(page(ok))));
     assert.equal(checks.landmarksOnce(parse(page('<header><nav></nav></header><main></main>'))), false);
     assert.equal(checks.landmarksOnce(parse(page(ok + '<nav></nav>'))), false);
+    assert.equal(checks.landmarksOnce(parse(page(ok + '<footer></footer>'))), false);
+  });
+
+  test('CA-7: rejeita nav fora do header ou h1 fora do main', () => {
+    assert.ok(checks.landmarksNested(parse(page('<header><nav></nav></header><main><h1>Oi</h1></main>'))));
+    assert.equal(checks.landmarksNested(parse(page('<header></header><nav></nav><main><h1>Oi</h1></main>'))), false);
+    assert.equal(checks.landmarksNested(parse(page('<header><nav></nav><h1>Oi</h1></header><main></main>'))), false);
   });
 
   test('CA-8: rejeita CTA ausente ou apontando para outro destino; aceita <button>', () => {
@@ -229,6 +319,20 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.deepEqual(checks.brokenAnchors(doc), ['#sumiu']);
   });
 
+  test('CA-10: exige ao menos uma âncora interna real e detecta ids duplicados', () => {
+    assert.equal(checks.internalAnchors(parse(page('<a href="#">topo</a><a href="/x">x</a>'))).length, 0);
+    assert.equal(checks.internalAnchors(parse(page('<div id="a"></div><a href="#a">a</a>'))).length, 1);
+    assert.deepEqual(checks.duplicateIds(parse(page('<div id="a"></div><p id="a"></p><p id="b"></p>'))), ['a']);
+    assert.deepEqual(checks.duplicateIds(parse(page('<div id="a"></div><p id="b"></p>'))), []);
+  });
+
+  test('CA-11: rejeita stylesheet ausente, com outro href ou rel diferente', () => {
+    assert.ok(checks.stylesheetLinked(parse(page('', '<link rel="stylesheet" href="css/styles.css">'))));
+    assert.equal(checks.stylesheetLinked(parse(page(''))), false);
+    assert.equal(checks.stylesheetLinked(parse(page('', '<link rel="stylesheet" href="styles.css">'))), false);
+    assert.equal(checks.stylesheetLinked(parse(page('', '<link rel="preload" href="css/styles.css">'))), false);
+  });
+
   test('CA-12: exige @media com min-width (max-width ou ausência falham)', () => {
     assert.ok(checks.mediaMinWidth('@media (min-width: 768px) { a {} }'));
     assert.ok(checks.mediaMinWidth('@media screen and (MIN-WIDTH:48em){}'));
@@ -251,5 +355,19 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.footerHasCopyright(parse(page('<footer>AutoVenda</footer>'))), false);
     assert.ok(checks.footerHasCopyright(parse(page('<footer>X &copy; 2026</footer>'))));
     assert.ok(checks.footerHasCopyright(parse(page('<footer>Todos os DIREITOS reservados</footer>'))));
+  });
+
+  test('CA-15: rejeita package.json sem type module, sem node --test ou sem jsdom em devDependencies', () => {
+    const ok = {
+      type: 'module',
+      scripts: { test: 'node --test "tests/**/*.test.js"' },
+      devDependencies: { jsdom: '^26.1.0' },
+    };
+    assert.ok(checks.packageConfig(ok));
+    assert.equal(checks.packageConfig({ ...ok, type: 'commonjs' }), false);
+    assert.equal(checks.packageConfig({ ...ok, scripts: { test: 'jest' } }), false);
+    assert.equal(checks.packageConfig({ ...ok, scripts: {} }), false);
+    assert.equal(checks.packageConfig({ ...ok, devDependencies: {} }), false);
+    assert.equal(checks.packageConfig({ ...ok, dependencies: { jsdom: '^26.1.0' }, devDependencies: undefined }), false);
   });
 });
