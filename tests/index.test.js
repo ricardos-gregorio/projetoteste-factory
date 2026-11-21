@@ -444,6 +444,16 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.footerHasCopyright(parse(page('<footer>  </footer>'))), false);
   });
 
+  test('CA-11/CA-12/CA-13 (borda): stylesheet fora do head, min-width só em comentário e alt sem valor', () => {
+    assert.equal(checks.stylesheetLinked(parse(page('<link rel="stylesheet" href="css/styles.css">'))), false);
+    assert.ok(checks.stylesheetLinked(parse(page('', '<link rel="alternate stylesheet" href="css/styles.css">'))));
+    assert.equal(checks.mediaMinWidth('/* min-width */ .x { color: red; }'), false);
+    assert.equal(checks.mediaMinWidth('@media (max-width: 600px) { .x { min-width: 1px; } }'), false);
+    assert.ok(checks.imgsHaveAlt(parse(page('<img src="a.png" alt>'))));
+    assert.equal(checks.imgsHaveAlt(parse(page('<img src="a.png" alt="ok"><img src="b.png">'))), false);
+    assert.ok(checks.imgsHaveAlt(parse(page('<p>sem imagens</p>'))));
+  });
+
   test('CA-15: rejeita package.json sem type module, sem node --test ou sem jsdom em devDependencies', () => {
     const ok = {
       type: 'module',
