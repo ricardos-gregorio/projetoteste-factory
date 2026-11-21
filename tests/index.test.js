@@ -103,7 +103,8 @@ const checks = {
   packageConfig: (pkg) =>
     pkg?.type === 'module' &&
     /\bnode\s+--test\b/.test(pkg?.scripts?.test ?? '') &&
-    Boolean(pkg?.devDependencies?.jsdom),
+    Boolean(pkg?.devDependencies?.jsdom) &&
+    !pkg?.dependencies?.jsdom,
 };
 
 const page = (body, head = '') =>
@@ -239,6 +240,7 @@ describe('página de boas-vindas', () => {
     assert.equal(pkg.type, 'module');
     assert.match(pkg.scripts?.test ?? '', /node --test/);
     assert.ok(pkg.devDependencies?.jsdom, 'jsdom deve ser devDependency');
+    assert.ok(!pkg.dependencies?.jsdom, 'jsdom não deve estar em dependencies');
     assert.ok(checks.packageConfig(pkg));
   });
 });
@@ -249,6 +251,7 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.langPtBR(parse('<!DOCTYPE html><html><body></body></html>')), false);
     assert.equal(checks.langPtBR(parse('<!DOCTYPE html><html lang="en"><body></body></html>')), false);
     assert.equal(checks.langPtBR(parse('<!DOCTYPE html><html lang="pt"><body></body></html>')), false);
+    assert.equal(checks.langPtBR(parse('<!DOCTYPE html><html lang=""><body></body></html>')), false);
   });
 
   test('CA-3: rejeita charset ausente/não UTF-8 e viewport ausente ou sem width=device-width', () => {
@@ -320,6 +323,8 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.ctaValid(parse(page('<a>Ver carros</a>'))), false);
     assert.ok(checks.ctaValid(parse(page('<a href="#destaques">VER CARROS</a>'))));
     assert.ok(checks.ctaValid(parse(page('<button type="button">Ver carros</button>'))));
+    assert.equal(checks.ctaValid(parse(page(
+      '<a href="#destaques">Ver carros</a><a href="/catalogo">Ver carros</a>'))), false);
   });
 
   test('CA-9: rejeita ausência de #destaques, menos de 3 cards, card sem título ou com título vazio', () => {
@@ -390,6 +395,7 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.mediaMinWidth('@media (max-width: 768px) { a {} }'), false);
     assert.equal(checks.mediaMinWidth('.x { min-width: 10px; }'), false);
     assert.equal(checks.mediaMinWidth(''), false);
+    assert.equal(checks.mediaMinWidth('@media print { .x { min-width: 10px; } }'), false);
   });
 
   test('CA-13: detecta img sem alt, <script> e style inline; aceita alt vazio', () => {
@@ -406,6 +412,8 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.footerHasCopyright(parse(page('<footer>AutoVenda</footer>'))), false);
     assert.ok(checks.footerHasCopyright(parse(page('<footer>X &copy; 2026</footer>'))));
     assert.ok(checks.footerHasCopyright(parse(page('<footer>Todos os DIREITOS reservados</footer>'))));
+    assert.ok(checks.footerHasCopyright(parse(page('<footer>© 2026 AutoVenda</footer>'))));
+    assert.equal(checks.footerHasCopyright(parse(page('<footer>  </footer>'))), false);
   });
 
   test('CA-15: rejeita package.json sem type module, sem node --test ou sem jsdom em devDependencies', () => {
@@ -420,5 +428,7 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.packageConfig({ ...ok, scripts: {} }), false);
     assert.equal(checks.packageConfig({ ...ok, devDependencies: {} }), false);
     assert.equal(checks.packageConfig({ ...ok, dependencies: { jsdom: '^26.1.0' }, devDependencies: undefined }), false);
+    assert.equal(checks.packageConfig({ ...ok, dependencies: { jsdom: '^26.1.0' } }), false);
+    assert.equal(checks.packageConfig(undefined), false);
   });
 });
