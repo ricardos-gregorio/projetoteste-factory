@@ -200,7 +200,7 @@ describe('página de boas-vindas', () => {
     const navTexts = [...document.querySelectorAll('header nav a')].map((a) => a.textContent.trim());
     assert.deepEqual(navTexts, ['Início', 'Destaques', 'Contato']);
     const cardTitles = [...document.querySelectorAll('#destaques .card')]
-      .map((c) => c.querySelector('h2, h3').textContent.trim());
+      .map((c) => (c.querySelector('h2, h3')?.textContent ?? '').trim());
     for (const t of ['Carros novos', 'Seminovos', 'Financiamento']) {
       assert.ok(cardTitles.includes(t), `card "${t}" ausente`);
     }
