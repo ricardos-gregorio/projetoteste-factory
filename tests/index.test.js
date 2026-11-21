@@ -79,6 +79,10 @@ const checks = {
     const content = (meta?.getAttribute('content') ?? '').trim();
     return content.length > 0 && /carro/i.test(content);
   },
+  h1InMain: (doc) => {
+    const h1 = doc.querySelector('h1');
+    return Boolean(h1 && h1.closest('main'));
+  },
   landmarksNested: (doc) => Boolean(doc.querySelector('header nav') && doc.querySelector('main h1')),
   internalAnchors: (doc) =>
     [...doc.querySelectorAll('a[href^="#"]')].filter((a) => a.getAttribute('href') !== '#'),
@@ -148,10 +152,12 @@ describe('página de boas-vindas', () => {
     assert.ok(checks.descriptionValid(document));
   });
 
-  test('CA-6: exatamente um h1 com mensagem de boas-vindas', () => {
+  test('CA-6: exatamente um h1, dentro de <main>, com mensagem de boas-vindas', () => {
     assert.equal(document.querySelectorAll('h1').length, 1);
     assert.match(document.querySelector('h1').textContent, WELCOME_RE);
+    assert.ok(document.querySelector('main h1'), 'o <h1> deve ficar dentro do <main>');
     assert.ok(checks.singleWelcomeH1(document));
+    assert.ok(checks.h1InMain(document));
   });
 
   test('CA-7: landmarks header, nav, main e footer presentes exatamente uma vez', () => {
@@ -197,7 +203,7 @@ describe('página de boas-vindas', () => {
     assert.deepEqual(checks.duplicateIds(document), []);
   });
 
-  test('Escopo: navegação, cards e rodapé conforme a spec', () => {
+  test('CA-10: navegação Início/Destaques/Contato, cards e rodapé id="contato" conforme a spec', () => {
     const navTexts = [...document.querySelectorAll('header nav a')].map((a) => a.textContent.trim());
     assert.deepEqual(navTexts, ['Início', 'Destaques', 'Contato']);
     const cardTitles = [...document.querySelectorAll('#destaques .card')]
@@ -301,6 +307,14 @@ describe('casos de borda e de erro dos verificadores', () => {
     for (const t of ['Bem-vinda!', 'BEM VINDOS', 'Boas-vindas', 'boas vindas']) {
       assert.ok(checks.singleWelcomeH1(parse(page(`<h1>${t}</h1>`))), t);
     }
+  });
+
+  test('CA-6: rejeita h1 de boas-vindas fora do <main> ou ausente', () => {
+    assert.ok(checks.h1InMain(parse(page('<main><section><h1>Bem-vindo</h1></section></main>'))));
+    assert.equal(checks.h1InMain(parse(page('<header><h1>Bem-vindo</h1></header><main></main>'))), false);
+    assert.equal(checks.h1InMain(parse(page('<h1>Bem-vindo</h1><main><p>x</p></main>'))), false);
+    assert.equal(checks.h1InMain(parse(page('<main><h2>Bem-vindo</h2></main>'))), false);
+    assert.equal(checks.h1InMain(parse(page(''))), false);
   });
 
   test('CA-7: rejeita landmark ausente ou duplicado', () => {
