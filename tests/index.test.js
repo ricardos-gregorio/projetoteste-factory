@@ -51,7 +51,11 @@ const checks = {
     [...doc.querySelectorAll('a[href^="#"]')]
       .map((a) => a.getAttribute('href'))
       .filter((href) => href !== '#')
-      .filter((href) => !doc.getElementById(decodeURIComponent(href.slice(1)))),
+      .filter((href) => {
+        let id = href.slice(1);
+        try { id = decodeURIComponent(id); } catch { /* fragmento malformado: usa o valor bruto */ }
+        return !doc.getElementById(id);
+      }),
   noScriptNoInlineStyle: (doc) =>
     doc.querySelectorAll('script').length === 0 && doc.querySelectorAll('[style]').length === 0,
   imgsHaveAlt: (doc) => [...doc.querySelectorAll('img')].every((img) => img.hasAttribute('alt')),
