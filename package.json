@@ -4,6 +4,9 @@
   "private": true,
   "description": "Página de boas-vindas do site de venda de carros",
   "type": "module",
+  "engines": {
+    "node": ">=21"
+  },
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\""
   },
