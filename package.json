@@ -1,0 +1,13 @@
+{
+  "name": "projetoteste-factory",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Página de boas-vindas do site de venda de carros",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}
