@@ -363,6 +363,16 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.deepEqual(checks.brokenAnchors(doc), ['#sumiu']);
   });
 
+  test('CA-10: âncoras com fragmento percent-encoded são decodificadas; fragmento malformado não quebra', () => {
+    const doc = parse(page(
+      '<section id="início"></section><a href="#in%C3%ADcio">ok</a>' +
+      '<a href="#%E0%A4%A">malformado</a><a href="#in%C3%ADcio-x">x</a>',
+    ));
+    assert.deepEqual(checks.brokenAnchors(doc), ['#%E0%A4%A', '#in%C3%ADcio-x']);
+    const docMalformadoExistente = parse(page('<div id="%E0%A4%A"></div><a href="#%E0%A4%A">x</a>'));
+    assert.deepEqual(checks.brokenAnchors(docMalformadoExistente), []);
+  });
+
   test('CA-10: exige ao menos uma âncora interna real e detecta ids duplicados', () => {
     assert.equal(checks.internalAnchors(parse(page('<a href="#">topo</a><a href="/x">x</a>'))).length, 0);
     assert.equal(checks.internalAnchors(parse(page('<div id="a"></div><a href="#a">a</a>'))).length, 1);
