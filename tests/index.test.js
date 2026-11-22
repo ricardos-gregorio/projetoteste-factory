@@ -72,10 +72,17 @@ const checks = {
     return Boolean(charset && charset.getAttribute('charset').trim().toLowerCase() === 'utf-8' &&
       viewport && /width\s*=\s*device-width/i.test(viewport.getAttribute('content') ?? ''));
   },
+  // Marca aceita em header .brand, .app-header .brand, .brand-link ou .brand-text.
+  brandText: (doc) => {
+    const el = doc.querySelector(
+      'header .brand, .app-header .brand, .app-header .brand-link, .app-sidebar .brand-link, .brand-text',
+    );
+    return (el?.textContent ?? '').trim();
+  },
   titleValid: (doc) => {
     const title = (doc.querySelector('head > title')?.textContent ?? '').trim();
     if (!title) return false;
-    const brand = (doc.querySelector('header .brand')?.textContent ?? '').trim();
+    const brand = checks.brandText(doc);
     return /carros?/i.test(title) ||
       (brand.length > 0 && title.toLowerCase().includes(brand.toLowerCase()));
   },
@@ -114,6 +121,75 @@ const checks = {
     /\bnode\s+--test\b/.test(pkg?.scripts?.test ?? '') &&
     Boolean(pkg?.devDependencies?.jsdom) &&
     !pkg?.dependencies?.jsdom,
+  // CA-16: shell AdminLTE — .app-wrapper sob o body (filho direto ou único wrapper).
+  hasAppWrapper: (doc) => {
+    const wrappers = [...doc.body?.querySelectorAll('.app-wrapper') ?? []];
+    if (wrappers.length === 0) return false;
+    return wrappers.some((el) => el.parentElement === doc.body);
+  },
+  // CA-17: .app-header é ou contém o <header> e envolve marca + único <nav>.
+  hasAppHeader: (doc) => {
+    const appHeader = doc.querySelector('.app-header');
+    if (!appHeader) return false;
+    const header = doc.querySelector('header');
+    if (!header) return false;
+    const headerOk = appHeader === header || appHeader.contains(header) || header.contains(appHeader);
+    if (!headerOk) return false;
+    const brandOk = Boolean(
+      appHeader.querySelector('.brand, .brand-link, .brand-text') ||
+      header.querySelector('.brand, .brand-link, .brand-text'),
+    );
+    const nav = doc.querySelector('nav');
+    return brandOk && Boolean(nav) && (appHeader.contains(nav) || header.contains(nav));
+  },
+  // CA-18: .app-sidebar com links Início/Destaques/Contato; sem segundo <nav>.
+  hasAppSidebar: (doc) => {
+    const sidebar = doc.querySelector('.app-sidebar');
+    if (!sidebar) return false;
+    if (sidebar.querySelector('nav') || doc.querySelectorAll('nav').length !== 1) return false;
+    const expected = [
+      ['Início', '#inicio'],
+      ['Destaques', '#destaques'],
+      ['Contato', '#contato'],
+    ];
+    const links = [...sidebar.querySelectorAll('a[href^="#"]')].map((a) => [
+      a.textContent.trim(),
+      a.getAttribute('href'),
+    ]);
+    return expected.every(([text, href]) =>
+      links.some(([t, h]) => t === text && h === href));
+  },
+  // CA-19: .app-main (e .app-content descendente ou o próprio) com #inicio e #destaques.
+  hasAppMain: (doc) => {
+    const main = doc.querySelector('.app-main');
+    if (!main) return false;
+    const contentRoot = main.querySelector('.app-content') ?? main;
+    return Boolean(
+      contentRoot.querySelector('#inicio') && contentRoot.querySelector('#destaques'),
+    );
+  },
+  // CA-20: CDN HTTPS Bootstrap 5 + AdminLTE 4, além de css/styles.css.
+  cdnStylesheets: (doc) => {
+    const hrefs = [...doc.head.querySelectorAll('link[rel~="stylesheet"]')]
+      .map((l) => l.getAttribute('href') ?? '');
+    const https = hrefs.filter((h) => /^https:\/\//i.test(h));
+    const hasBootstrap = https.some((h) => /bootstrap/i.test(h));
+    const hasAdminLte = https.some((h) => /adminlte/i.test(h));
+    const hasLocal = hrefs.some((h) => h === 'css/styles.css');
+    return hasBootstrap && hasAdminLte && hasLocal;
+  },
+  // CA-21: cada #destaques .card tem .card-body (título h2/h3 dentro do card).
+  cardsHaveBody: (doc) => {
+    const section = doc.getElementById('destaques');
+    if (!section) return false;
+    const cards = [...section.querySelectorAll('.card')];
+    if (cards.length < 3) return false;
+    return cards.every((card) => {
+      const body = card.querySelector('.card-body');
+      const title = card.querySelector('h2, h3');
+      return Boolean(body && title && title.textContent.trim() && card.contains(title));
+    });
+  },
 };
 
 const page = (body, head = '') =>
@@ -144,7 +220,7 @@ describe('página de boas-vindas', () => {
   test('CA-4: <title> não vazio e menciona carro(s) ou o nome do site', () => {
     const title = document.title.trim();
     assert.ok(title.length > 0, 'title vazio');
-    assert.ok(document.querySelector('header .brand'), 'marca (header .brand) ausente');
+    assert.ok(checks.brandText(document), 'marca ausente (header .brand / .brand-link / .brand-text)');
     assert.ok(checks.titleValid(document), `title "${title}" não menciona carros nem a marca`);
   });
 
@@ -254,6 +330,73 @@ describe('página de boas-vindas', () => {
     assert.ok(!pkg.dependencies?.jsdom, 'jsdom não deve estar em dependencies');
     assert.ok(checks.packageConfig(pkg));
   });
+
+  test('CA-16: existe .app-wrapper como contêiner de layout sob o <body>', () => {
+    const wrapper = document.querySelector('.app-wrapper');
+    assert.ok(wrapper, '.app-wrapper ausente');
+    assert.equal(wrapper.parentElement, document.body, '.app-wrapper deve ser filho direto de <body>');
+    assert.ok(checks.hasAppWrapper(document));
+  });
+
+  test('CA-17: .app-header envolve a marca e o único <nav> (é ou contém o <header>)', () => {
+    const appHeader = document.querySelector('.app-header');
+    assert.ok(appHeader, '.app-header ausente');
+    assert.ok(
+      appHeader.matches('header') || appHeader.querySelector('header') || document.querySelector('header .app-header'),
+      '.app-header deve ser ou estar relacionado ao <header>',
+    );
+    assert.ok(
+      appHeader.querySelector('.brand, .brand-link, .brand-text') ||
+        document.querySelector('header .brand, header .brand-link, header .brand-text'),
+      'marca ausente no header AdminLTE',
+    );
+    assert.ok(document.querySelector('.app-header nav, header.app-header nav, header nav'),
+      '<nav> deve ficar sob o header/navbar');
+    assert.ok(checks.hasAppHeader(document));
+  });
+
+  test('CA-18: .app-sidebar com links Início/Destaques/Contato e sem segundo <nav>', () => {
+    const sidebar = document.querySelector('.app-sidebar');
+    assert.ok(sidebar, '.app-sidebar ausente');
+    assert.equal(sidebar.querySelectorAll('nav').length, 0, 'sidebar não deve introduzir <nav>');
+    assert.equal(document.querySelectorAll('nav').length, 1, 'deve haver exatamente um <nav> na página');
+    const texts = [...sidebar.querySelectorAll('a')].map((a) => a.textContent.trim());
+    for (const t of ['Início', 'Destaques', 'Contato']) {
+      assert.ok(texts.includes(t), `link "${t}" ausente na sidebar`);
+    }
+    assert.ok(checks.hasAppSidebar(document));
+  });
+
+  test('CA-19: .app-main (com .app-content) contém #inicio e #destaques', () => {
+    const main = document.querySelector('.app-main');
+    assert.ok(main, '.app-main ausente');
+    const content = main.querySelector('.app-content') ?? main;
+    assert.ok(content.querySelector('#inicio'), '#inicio deve estar sob .app-main/.app-content');
+    assert.ok(content.querySelector('#destaques'), '#destaques deve estar sob .app-main/.app-content');
+    assert.ok(checks.hasAppMain(document));
+  });
+
+  test('CA-20: head referencia CDN HTTPS de Bootstrap e AdminLTE além de css/styles.css', () => {
+    const hrefs = [...document.head.querySelectorAll('link[rel~="stylesheet"]')]
+      .map((l) => l.getAttribute('href') ?? '');
+    assert.ok(hrefs.some((h) => /^https:\/\//i.test(h) && /bootstrap/i.test(h)),
+      'folha Bootstrap via CDN HTTPS ausente');
+    assert.ok(hrefs.some((h) => /^https:\/\//i.test(h) && /adminlte/i.test(h)),
+      'folha AdminLTE via CDN HTTPS ausente');
+    assert.ok(hrefs.includes('css/styles.css'), 'css/styles.css ausente');
+    assert.ok(checks.cdnStylesheets(document));
+  });
+
+  test('CA-21: cada card em #destaques tem .card-body e título h2/h3', () => {
+    const cards = document.querySelectorAll('#destaques .card');
+    assert.ok(cards.length >= 3, `esperado ≥ 3 cards, encontrado ${cards.length}`);
+    cards.forEach((card, i) => {
+      assert.ok(card.querySelector('.card-body'), `card ${i + 1} sem .card-body`);
+      const title = card.querySelector('h2, h3');
+      assert.ok(title && title.textContent.trim(), `card ${i + 1} sem título h2/h3`);
+    });
+    assert.ok(checks.cardsHaveBody(document));
+  });
 });
 
 describe('casos de borda e de erro dos verificadores', () => {
@@ -284,6 +427,10 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.titleValid(parse(page('', '<title>Página inicial</title>'))), false);
     assert.ok(checks.titleValid(parse(page(header, '<title>MinhaLoja - Início</title>'))));
     assert.ok(checks.titleValid(parse(page('', '<title>Venda de Carro</title>'))));
+    assert.ok(checks.titleValid(parse(page(
+      '<header class="app-header"><a class="brand-link"><span class="brand-text">AutoX</span></a></header>',
+      '<title>AutoX</title>',
+    ))));
   });
 
   test('CA-5: rejeita description ausente, vazia ou sem "carro"', () => {
@@ -486,5 +633,106 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.equal(checks.packageConfig({ ...ok, dependencies: { jsdom: '^26.1.0' }, devDependencies: undefined }), false);
     assert.equal(checks.packageConfig({ ...ok, dependencies: { jsdom: '^26.1.0' } }), false);
     assert.equal(checks.packageConfig(undefined), false);
+  });
+
+  test('CA-16: rejeita ausência de .app-wrapper ou wrapper fora do body', () => {
+    assert.equal(checks.hasAppWrapper(parse(page('<main></main>'))), false);
+    assert.equal(checks.hasAppWrapper(parse(page('<div class="wrapper"></div>'))), false);
+    assert.ok(checks.hasAppWrapper(parse(page('<div class="app-wrapper"><main></main></div>'))));
+    // wrapper aninhado sem ser filho direto de body falha
+    assert.equal(checks.hasAppWrapper(parse(page(
+      '<div><div class="app-wrapper"></div></div>'))), false);
+  });
+
+  test('CA-17: rejeita .app-header ausente, sem marca ou sem nav no header', () => {
+    const ok = '<header class="app-header"><a class="brand">X</a><nav></nav></header>';
+    assert.ok(checks.hasAppHeader(parse(page(ok))));
+    assert.equal(checks.hasAppHeader(parse(page('<header><a class="brand">X</a><nav></nav></header>'))), false);
+    assert.equal(checks.hasAppHeader(parse(page(
+      '<header class="app-header"><nav></nav></header>'))), false);
+    assert.equal(checks.hasAppHeader(parse(page(
+      '<header class="app-header"><a class="brand">X</a></header><nav></nav>'))), false);
+    assert.equal(checks.hasAppHeader(parse(page(
+      '<div class="app-header"><a class="brand">X</a><nav></nav></div>'))), false);
+  });
+
+  test('CA-18: rejeita sidebar ausente, links incompletos ou <nav> na sidebar', () => {
+    const links =
+      '<a href="#inicio">Início</a><a href="#destaques">Destaques</a><a href="#contato">Contato</a>';
+    const shell = (sideInner) => page(
+      `<header><nav><a href="#inicio">Início</a></nav></header>` +
+      `<aside class="app-sidebar">${sideInner}</aside>`,
+    );
+    assert.ok(checks.hasAppSidebar(parse(shell(`<ul>${links}</ul>`))));
+    assert.equal(checks.hasAppSidebar(parse(page('<aside></aside>'))), false);
+    assert.equal(checks.hasAppSidebar(parse(shell('<a href="#inicio">Início</a>'))), false);
+    // <nav> na sidebar viola CA-7 / CA-18
+    assert.equal(checks.hasAppSidebar(parse(shell(`<nav>${links}</nav>`))), false);
+    assert.equal(checks.hasAppSidebar(parse(page(
+      `<header><nav></nav></header><aside class="app-sidebar">${links}</aside><nav></nav>`,
+    ))), false);
+  });
+
+  test('CA-19: rejeita .app-main ausente ou sem #inicio/#destaques no conteúdo', () => {
+    assert.ok(checks.hasAppMain(parse(page(
+      '<main class="app-main"><div class="app-content">' +
+      '<section id="inicio"></section><section id="destaques"></section></div></main>',
+    ))));
+    assert.ok(checks.hasAppMain(parse(page(
+      '<main class="app-main"><section id="inicio"></section><section id="destaques"></section></main>',
+    ))));
+    assert.equal(checks.hasAppMain(parse(page('<main id="inicio"></main>'))), false);
+    assert.equal(checks.hasAppMain(parse(page(
+      '<main class="app-main"><div class="app-content"><section id="inicio"></section></div></main>',
+    ))), false);
+    assert.equal(checks.hasAppMain(parse(page(
+      '<div class="app-main"><section id="inicio"></section><section id="destaques"></section></div>' +
+      '<section id="inicio"></section>',
+    ))), true); // ainda tem ambos sob app-main
+    assert.equal(checks.hasAppMain(parse(page(
+      '<main class="app-main"><div class="app-content"></div></main>' +
+      '<section id="inicio"></section><section id="destaques"></section>',
+    ))), false);
+  });
+
+  test('CA-20: rejeita CDN HTTP, ausência de bootstrap/adminlte ou styles.css local', () => {
+    const links = (items) => items.map((h) => `<link rel="stylesheet" href="${h}">`).join('');
+    const ok = links([
+      'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
+      'https://cdn.jsdelivr.net/npm/admin-lte@4.0.0/dist/css/adminlte.min.css',
+      'css/styles.css',
+    ]);
+    assert.ok(checks.cdnStylesheets(parse(page('', ok))));
+    assert.equal(checks.cdnStylesheets(parse(page('', links([
+      'http://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
+      'https://cdn.jsdelivr.net/npm/admin-lte@4.0.0/dist/css/adminlte.min.css',
+      'css/styles.css',
+    ])))), false);
+    assert.equal(checks.cdnStylesheets(parse(page('', links([
+      'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
+      'css/styles.css',
+    ])))), false);
+    assert.equal(checks.cdnStylesheets(parse(page('', links([
+      'https://cdn.jsdelivr.net/npm/admin-lte@4.0.0/dist/css/adminlte.min.css',
+      'css/styles.css',
+    ])))), false);
+    assert.equal(checks.cdnStylesheets(parse(page('', links([
+      'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
+      'https://cdn.jsdelivr.net/npm/admin-lte@4.0.0/dist/css/adminlte.min.css',
+    ])))), false);
+  });
+
+  test('CA-21: rejeita cards sem .card-body, sem título ou menos de 3 cards', () => {
+    const card = (t, body = true) => body
+      ? `<div class="card"><div class="card-body"><h3>${t}</h3></div></div>`
+      : `<div class="card"><h3>${t}</h3></div>`;
+    const section = (inner) => page(`<section id="destaques">${inner}</section>`);
+    assert.ok(checks.cardsHaveBody(parse(section(card('A') + card('B') + card('C')))));
+    assert.equal(checks.cardsHaveBody(parse(section(card('A') + card('B')))), false);
+    assert.equal(checks.cardsHaveBody(parse(section(
+      card('A') + card('B') + card('C', false)))), false);
+    assert.equal(checks.cardsHaveBody(parse(section(
+      card('A') + card('B') + '<div class="card"><div class="card-body"><p>x</p></div></div>'))), false);
+    assert.equal(checks.cardsHaveBody(parse(page(card('A') + card('B') + card('C')))), false);
   });
 });
