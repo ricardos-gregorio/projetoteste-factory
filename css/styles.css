@@ -1,73 +1,48 @@
-/* Estilos da página de boas-vindas (mobile-first) */
+/* Overrides AutoVenda sobre Bootstrap 5 + AdminLTE 4 (mobile-first) */
 
 :root {
   --cor-primaria: #c62828;
   --cor-primaria-escura: #8e0000;
   --cor-texto: #222;
-  --cor-fundo: #f7f7f7;
-  --cor-superficie: #fff;
   --espaco: 1rem;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  line-height: 1.5;
-  color: var(--cor-texto);
-  background: var(--cor-fundo);
-}
-
-/* Cabeçalho */
-.site-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(var(--espaco) / 2);
-  padding: var(--espaco);
-  background: var(--cor-primaria);
-}
-
-.brand {
-  font-size: 1.5rem;
+/* Marca no header (navbar) */
+.app-header .brand {
   font-weight: 700;
-  color: #fff;
+  color: var(--cor-primaria);
   text-decoration: none;
 }
 
-.nav-list {
-  display: flex;
-  gap: var(--espaco);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.app-header .brand:hover,
+.app-header .brand:focus {
+  color: var(--cor-primaria-escura);
 }
 
-.nav-list a {
-  color: #fff;
-  text-decoration: none;
+.app-header .nav-link {
+  color: inherit;
 }
 
-.nav-list a:hover,
-.nav-list a:focus {
-  text-decoration: underline;
+.app-header .nav-link:hover,
+.app-header .nav-link:focus {
+  color: var(--cor-primaria);
+}
+
+/* Sidebar sempre acessível sem JS do tema */
+.app-sidebar .brand-text {
+  font-weight: 600;
 }
 
 /* Hero */
 .hero {
-  padding: calc(var(--espaco) * 3) var(--espaco);
+  padding: calc(var(--espaco) * 2) 0;
   text-align: center;
-  background: var(--cor-superficie);
 }
 
 .hero h1 {
   margin-top: 0;
   font-size: 1.75rem;
+  color: var(--cor-texto);
 }
 
 .hero-text {
@@ -76,71 +51,44 @@ body {
 }
 
 .cta {
-  display: inline-block;
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.5rem;
   font-weight: 700;
-  color: #fff;
-  text-decoration: none;
-  background: var(--cor-primaria);
+  background-color: var(--cor-primaria);
+  border-color: var(--cor-primaria);
 }
 
 .cta:hover,
 .cta:focus {
-  background: var(--cor-primaria-escura);
+  background-color: var(--cor-primaria-escura);
+  border-color: var(--cor-primaria-escura);
 }
 
 /* Destaques */
 .destaques {
-  padding: calc(var(--espaco) * 2) var(--espaco);
+  padding: calc(var(--espaco) * 2) 0;
 }
 
-.destaques h2 {
+.destaques > h2 {
   margin-top: 0;
+  margin-bottom: calc(var(--espaco) * 1.5);
   text-align: center;
 }
 
-.cards {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--espaco);
-  max-width: 64rem;
-  margin: 0 auto;
-}
-
-.card {
-  padding: var(--espaco);
-  border-radius: 0.5rem;
-  background: var(--cor-superficie);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.card h3 {
-  margin-top: 0;
+#destaques .card-title {
   color: var(--cor-primaria);
 }
 
 /* Rodapé */
-.site-footer {
-  padding: var(--espaco);
+.app-footer {
   text-align: center;
-  color: #fff;
-  background: #333;
 }
 
 /* Telas médias e maiores */
 @media (min-width: 768px) {
-  .site-header {
-    flex-direction: row;
-    justify-content: space-between;
-    padding: var(--espaco) calc(var(--espaco) * 2);
+  .hero {
+    padding: calc(var(--espaco) * 3) 0;
   }
 
   .hero h1 {
     font-size: 2.5rem;
-  }
-
-  .cards {
-    grid-template-columns: repeat(3, 1fr);
   }
 }
