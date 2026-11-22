@@ -5,7 +5,8 @@ Página estática (HTML + CSS) de boas-vindas do site de venda de carros.
 ## Estrutura
 
 - `index.html` — página de boas-vindas
-- `css/styles.css` — estilos (mobile-first, com media query para telas ≥ 768px)
+- `destaque.html` — página destaque (chat mock AdminLTE)
+- `css/styles.css` — estilos (mobile-first, com media query para telas ≥ 768px; inclui `.chat-*`)
 - `tests/` — testes automatizados (`node:test` + `jsdom`)
 
 ## Visualizar a página
