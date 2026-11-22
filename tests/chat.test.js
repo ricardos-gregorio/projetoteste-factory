@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
 
-const HTML_URL = new URL('../destaque.html', import.meta.url);
+const HTML_URL = new URL('../chat.html', import.meta.url);
+const LEGACY_HTML_URL = new URL('../destaque.html', import.meta.url);
 const CSS_URL = new URL('../css/styles.css', import.meta.url);
 
 const stripBom = (s) => s.replace(/^\uFEFF/, '');
@@ -78,7 +79,7 @@ const checks = {
     const nav = doc.querySelector('nav');
     return brandOk && Boolean(nav) && (appHeader.contains(nav) || header.contains(nav));
   },
-  /** Sidebar AutoVenda na página destaque: Início→index, Destaques→destaque, Contato→index#contato */
+  /** Sidebar AutoVenda na página chat: Início→index, Chat→chat (ou self #), Contato→index#contato */
   hasAppSidebar: (doc) => {
     const sidebar = doc.querySelector('.app-sidebar');
     if (!sidebar) return false;
@@ -86,20 +87,24 @@ const checks = {
     const byText = (text) =>
       [...sidebar.querySelectorAll('a')].find((a) => a.textContent.trim() === text);
     const inicio = byText('Início');
-    const destaques = byText('Destaques');
+    const chat = byText('Chat');
     const contato = byText('Contato');
-    if (!inicio || !destaques || !contato) return false;
+    if (!inicio || !chat || !contato) return false;
     const inicioOk = hrefMatches(inicio.getAttribute('href'), ['index.html']);
-    const destaquesOk = ['destaque.html', '#', ''].includes(
-      (destaques.getAttribute('href') ?? '').split('#')[0] ||
-        destaques.getAttribute('href') ||
-        '',
-    ) || ['destaque.html', '#'].includes(destaques.getAttribute('href'));
+    const chatHref = chat.getAttribute('href') ?? '';
+    const chatOk =
+      ['chat.html', '#', ''].includes(chatHref) ||
+      ['chat.html', '#'].includes((chatHref.split('#')[0] || chatHref));
     const contatoHref = contato.getAttribute('href') ?? '';
     const contatoOk =
       contatoHref === 'index.html#contato' ||
       /^index\.html#contato$/i.test(contatoHref);
-    return inicioOk && destaquesOk && contatoOk;
+    return inicioOk && chatOk && contatoOk;
+  },
+  /** Issue #9 CA-5: HTML da página chat sem destaque.html nem âncora de menu Destaques. */
+  noLegacyDestaquesMenu: (html) => {
+    if (/destaque\.html/i.test(html)) return false;
+    return !/<a\b[^>]*>\s*Destaques\s*<\/a>/i.test(html);
   },
   hasAppMain: (doc) => Boolean(doc.querySelector('.app-main')),
   footerHasCopyright: (doc) => {
@@ -208,12 +213,12 @@ const checks = {
     if (!headerNav || !sidebar) return false;
     for (const scope of [headerNav, sidebar]) {
       const inicio = byText(scope, 'Início');
-      const destaques = byText(scope, 'Destaques');
+      const chat = byText(scope, 'Chat');
       const contato = byText(scope, 'Contato');
-      if (!inicio || !destaques || !contato) return false;
+      if (!inicio || !chat || !contato) return false;
       if (!hrefMatches(inicio.getAttribute('href'), ['index.html'])) return false;
-      const dHref = destaques.getAttribute('href') ?? '';
-      if (!(dHref === 'destaque.html' || dHref === '#' || dHref === '')) return false;
+      const cHref = chat.getAttribute('href') ?? '';
+      if (!(cHref === 'chat.html' || cHref === '#' || cHref === '')) return false;
       if ((contato.getAttribute('href') ?? '') !== 'index.html#contato') return false;
     }
     return true;
@@ -233,10 +238,11 @@ const checks = {
       }),
 };
 
-describe('página destaque (chat)', () => {
-  test('CA-1: destaque.html existe, doctype HTML5, lang=pt-BR, charset UTF-8 e viewport', () => {
-    assert.ok(fs.existsSync(HTML_URL), 'destaque.html deve existir na raiz');
-    assert.ok(checks.doctype(rawHtml), 'destaque.html deve começar com <!DOCTYPE html>');
+describe('página chat', () => {
+  test('CA-1 / issue #9 CA-1: chat.html existe, destaque.html ausente, doctype HTML5, lang=pt-BR, charset UTF-8 e viewport', () => {
+    assert.ok(fs.existsSync(HTML_URL), 'chat.html deve existir na raiz');
+    assert.equal(fs.existsSync(LEGACY_HTML_URL), false, 'destaque.html não deve mais existir');
+    assert.ok(checks.doctype(rawHtml), 'chat.html deve começar com <!DOCTYPE html>');
     assert.equal(document.documentElement.getAttribute('lang'), 'pt-BR');
     assert.ok(checks.langPtBR(document));
     assert.ok(checks.charsetAndViewport(document));
@@ -302,13 +308,24 @@ describe('página destaque (chat)', () => {
     assert.ok(checks.chatCssRules(rawCss), 'regras .chat-* ou @media mobile ausentes');
   });
 
-  test('CA-11: nav Início→index.html, Destaques→destaque.html, Contato→index.html#contato; âncoras ok', () => {
+  test('CA-11 / issue #9 CA-4: nav Início→index.html, Chat→chat.html, Contato→index.html#contato; âncoras ok', () => {
     assert.ok(checks.navLinksValid(document));
+    assert.ok(checks.hasAppSidebar(document));
+    const chatLinks = [
+      ...document.querySelectorAll('header nav a'),
+      ...document.querySelectorAll('.app-sidebar a'),
+    ].filter((a) => a.textContent.trim() === 'Chat');
+    assert.ok(chatLinks.length >= 2, 'esperado link Chat no header e na sidebar');
+    for (const a of chatLinks) {
+      const href = a.getAttribute('href') ?? '';
+      assert.ok(href === 'chat.html' || href === '#' || href === '', `href Chat inválido: ${href}`);
+    }
     assert.deepEqual(checks.brokenAnchors(document), []);
+    assert.ok(checks.noLegacyDestaquesMenu(rawHtml), 'chat.html não deve citar destaque.html nem menu Destaques');
   });
 });
 
-describe('casos de borda e de erro dos verificadores (destaque)', () => {
+describe('casos de borda e de erro dos verificadores (chat)', () => {
   test('CA-1: doctype e lang rejeitam ausência / valores inválidos', () => {
     assert.ok(checks.doctype('\uFEFF<!DOCTYPE html>'));
     assert.equal(checks.doctype('<html></html>'), false);
@@ -343,15 +360,24 @@ describe('casos de borda e de erro dos verificadores (destaque)', () => {
       false,
     );
     const links =
-      '<a href="index.html">Início</a><a href="destaque.html">Destaques</a><a href="index.html#contato">Contato</a>';
+      '<a href="index.html">Início</a><a href="chat.html">Chat</a><a href="index.html#contato">Contato</a>';
     const shell = (side) =>
       page(
         `<header><nav><a href="index.html">Início</a></nav></header>` +
           `<aside class="app-sidebar">${side}</aside>`,
       );
     assert.ok(checks.hasAppSidebar(parse(shell(links))));
+    assert.ok(checks.hasAppSidebar(parse(shell(
+      '<a href="index.html">Início</a><a href="#">Chat</a><a href="index.html#contato">Contato</a>',
+    ))));
     assert.equal(checks.hasAppSidebar(parse(shell(`<nav>${links}</nav>`))), false);
     assert.equal(checks.hasAppSidebar(parse(shell('<a href="index.html">Início</a>'))), false);
+    assert.equal(checks.hasAppSidebar(parse(shell(
+      '<a href="index.html">Início</a><a href="destaque.html">Destaques</a><a href="index.html#contato">Contato</a>',
+    ))), false);
+    assert.equal(checks.hasAppSidebar(parse(shell(
+      '<a href="index.html">Início</a><a href="destaque.html">Chat</a><a href="index.html#contato">Contato</a>',
+    ))), false);
     assert.equal(checks.footerHasCopyright(parse(page('<footer>AutoVenda</footer>'))), false);
     assert.ok(checks.footerHasCopyright(parse(page('<footer class="app-footer">© 2026</footer>'))));
   });
@@ -576,28 +602,43 @@ describe('casos de borda e de erro dos verificadores (destaque)', () => {
     );
   });
 
-  test('CA-11: rejeita hrefs incoerentes e detecta âncora quebrada (ignora href="#")', () => {
-    const nav = (i, d, c) =>
+  test('CA-11 / issue #9 CA-4: rejeita hrefs incoerentes e detecta âncora quebrada (ignora href="#")', () => {
+    const nav = (i, d, c, label = 'Chat') =>
       page(
         `<header><nav>` +
-          `<a href="${i}">Início</a><a href="${d}">Destaques</a><a href="${c}">Contato</a>` +
+          `<a href="${i}">Início</a><a href="${d}">${label}</a><a href="${c}">Contato</a>` +
           `</nav></header>` +
           `<aside class="app-sidebar">` +
-          `<a href="${i}">Início</a><a href="${d}">Destaques</a><a href="${c}">Contato</a>` +
+          `<a href="${i}">Início</a><a href="${d}">${label}</a><a href="${c}">Contato</a>` +
           `</aside>`,
       );
-    assert.ok(checks.navLinksValid(parse(nav('index.html', 'destaque.html', 'index.html#contato'))));
+    assert.ok(checks.navLinksValid(parse(nav('index.html', 'chat.html', 'index.html#contato'))));
+    assert.ok(checks.navLinksValid(parse(nav('index.html', '#', 'index.html#contato'))));
     assert.equal(
       checks.navLinksValid(parse(nav('index.html', '#destaques', 'index.html#contato'))),
       false,
     );
     assert.equal(
-      checks.navLinksValid(parse(nav('#inicio', 'destaque.html', 'index.html#contato'))),
+      checks.navLinksValid(parse(nav('#inicio', 'chat.html', 'index.html#contato'))),
+      false,
+    );
+    assert.equal(
+      checks.navLinksValid(parse(nav('index.html', 'destaque.html', 'index.html#contato'))),
+      false,
+    );
+    assert.equal(
+      checks.navLinksValid(parse(nav('index.html', 'chat.html', 'index.html#contato', 'Destaques'))),
       false,
     );
     const doc = parse(
       page('<a href="#">ok</a><a href="#sumiu">x</a><div id="ok"></div><a href="#ok">ok</a>'),
     );
     assert.deepEqual(checks.brokenAnchors(doc), ['#sumiu']);
+  });
+
+  test('issue #9 CA-5: rejeita HTML legado com destaque.html ou menu Destaques', () => {
+    assert.ok(checks.noLegacyDestaquesMenu('<a href="chat.html">Chat</a>'));
+    assert.equal(checks.noLegacyDestaquesMenu('<a href="destaque.html">Chat</a>'), false);
+    assert.equal(checks.noLegacyDestaquesMenu('<a href="chat.html">Destaques</a>'), false);
   });
 });
