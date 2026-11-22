@@ -108,7 +108,7 @@ const checks = {
     const links = [...doc.querySelectorAll('header nav a')]
       .map((a) => [a.textContent.trim(), a.getAttribute('href')]);
     return JSON.stringify(links) ===
-      JSON.stringify([['Início', '#inicio'], ['Destaques', '#destaques'], ['Contato', '#contato']]);
+      JSON.stringify([['Início', '#inicio'], ['Destaques', 'destaque.html'], ['Contato', '#contato']]);
   },
   footerIsContato: (doc) => doc.querySelector('footer')?.id === 'contato',
   requiredCardTitles: (doc) => {
@@ -142,17 +142,17 @@ const checks = {
     const nav = doc.querySelector('nav');
     return brandOk && Boolean(nav) && (appHeader.contains(nav) || header.contains(nav));
   },
-  // CA-18: .app-sidebar com links Início/Destaques/Contato; sem segundo <nav>.
+  // CA-18 / issue #7 CA-10: .app-sidebar com Início/Destaques/Contato; Destaques → destaque.html.
   hasAppSidebar: (doc) => {
     const sidebar = doc.querySelector('.app-sidebar');
     if (!sidebar) return false;
     if (sidebar.querySelector('nav') || doc.querySelectorAll('nav').length !== 1) return false;
     const expected = [
       ['Início', '#inicio'],
-      ['Destaques', '#destaques'],
+      ['Destaques', 'destaque.html'],
       ['Contato', '#contato'],
     ];
-    const links = [...sidebar.querySelectorAll('a[href^="#"]')].map((a) => [
+    const links = [...sidebar.querySelectorAll('a')].map((a) => [
       a.textContent.trim(),
       a.getAttribute('href'),
     ]);
@@ -284,16 +284,24 @@ describe('página de boas-vindas', () => {
     assert.deepEqual(checks.duplicateIds(document), []);
   });
 
-  test('CA-10: navegação Início/Destaques/Contato, cards e rodapé id="contato" conforme a spec', () => {
+  test('CA-10: navegação Início/Destaques→destaque.html/Contato, cards e rodapé id="contato"', () => {
     const navTexts = [...document.querySelectorAll('header nav a')].map((a) => a.textContent.trim());
     assert.deepEqual(navTexts, ['Início', 'Destaques', 'Contato']);
+    const destaquesLinks = [
+      ...document.querySelectorAll('header nav a'),
+      ...document.querySelectorAll('.app-sidebar a'),
+    ].filter((a) => a.textContent.trim() === 'Destaques');
+    assert.ok(destaquesLinks.length >= 2, 'esperado link Destaques no header e na sidebar');
+    for (const a of destaquesLinks) {
+      assert.equal(a.getAttribute('href'), 'destaque.html');
+    }
     const cardTitles = [...document.querySelectorAll('#destaques .card')]
       .map((c) => (c.querySelector('h2, h3')?.textContent ?? '').trim());
     for (const t of ['Carros novos', 'Seminovos', 'Financiamento']) {
       assert.ok(cardTitles.includes(t), `card "${t}" ausente`);
     }
     assert.equal(document.querySelector('footer')?.id, 'contato', 'o rodapé deve ter id="contato"');
-    assert.ok(checks.navLinksValid(document), 'nav deve ter Início/Destaques/Contato com hrefs corretos');
+    assert.ok(checks.navLinksValid(document), 'nav deve ter Início/Destaques→destaque.html/Contato');
     assert.ok(checks.footerIsContato(document));
   });
 
@@ -528,17 +536,17 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.deepEqual(checks.duplicateIds(parse(page('<div id="a"></div><p id="b"></p>'))), []);
   });
 
-  test('CA-10: navegação exige Início, Destaques e Contato nessa ordem e rodapé com id="contato"', () => {
+  test('CA-10: navegação exige Início, Destaques→destaque.html e Contato nessa ordem e rodapé com id="contato"', () => {
     const li = (t, h) => `<a href="${h}">${t}</a>`;
     const nav = (inner) => page(`<header><nav>${inner}</nav></header>`);
-    const ok = li('Início', '#inicio') + li('Destaques', '#destaques') + li('Contato', '#contato');
+    const ok = li('Início', '#inicio') + li('Destaques', 'destaque.html') + li('Contato', '#contato');
     assert.ok(checks.navLinksValid(parse(nav(ok))));
     assert.equal(checks.navLinksValid(parse(nav(
-      li('Destaques', '#destaques') + li('Início', '#inicio') + li('Contato', '#contato')))), false);
-    assert.equal(checks.navLinksValid(parse(nav(li('Início', '#inicio') + li('Destaques', '#destaques')))), false);
+      li('Destaques', 'destaque.html') + li('Início', '#inicio') + li('Contato', '#contato')))), false);
+    assert.equal(checks.navLinksValid(parse(nav(li('Início', '#inicio') + li('Destaques', 'destaque.html')))), false);
     assert.equal(checks.navLinksValid(parse(nav(ok + li('Blog', '#blog')))), false);
     assert.equal(checks.navLinksValid(parse(nav(
-      li('Início', '#inicio') + li('Destaques', '#outro') + li('Contato', '#contato')))), false);
+      li('Início', '#inicio') + li('Destaques', '#destaques') + li('Contato', '#contato')))), false);
     assert.equal(checks.navLinksValid(parse(page(`<nav>${ok}</nav>`))), false);
     assert.ok(checks.footerIsContato(parse(page('<footer id="contato"></footer>'))));
     assert.equal(checks.footerIsContato(parse(page('<footer></footer><div id="contato"></div>'))), false);
@@ -658,7 +666,7 @@ describe('casos de borda e de erro dos verificadores', () => {
 
   test('CA-18: rejeita sidebar ausente, links incompletos ou <nav> na sidebar', () => {
     const links =
-      '<a href="#inicio">Início</a><a href="#destaques">Destaques</a><a href="#contato">Contato</a>';
+      '<a href="#inicio">Início</a><a href="destaque.html">Destaques</a><a href="#contato">Contato</a>';
     const shell = (sideInner) => page(
       `<header><nav><a href="#inicio">Início</a></nav></header>` +
       `<aside class="app-sidebar">${sideInner}</aside>`,
@@ -666,6 +674,10 @@ describe('casos de borda e de erro dos verificadores', () => {
     assert.ok(checks.hasAppSidebar(parse(shell(`<ul>${links}</ul>`))));
     assert.equal(checks.hasAppSidebar(parse(page('<aside></aside>'))), false);
     assert.equal(checks.hasAppSidebar(parse(shell('<a href="#inicio">Início</a>'))), false);
+    // Destaques ainda apontando para #destaques (legado) falha após issue #7
+    assert.equal(checks.hasAppSidebar(parse(shell(
+      '<a href="#inicio">Início</a><a href="#destaques">Destaques</a><a href="#contato">Contato</a>',
+    ))), false);
     // <nav> na sidebar viola CA-7 / CA-18
     assert.equal(checks.hasAppSidebar(parse(shell(`<nav>${links}</nav>`))), false);
     assert.equal(checks.hasAppSidebar(parse(page(
