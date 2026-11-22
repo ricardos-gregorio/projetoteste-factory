@@ -1,0 +1,31 @@
+{
+  "repo": "ricardos-gregorio/projetoteste-factory",
+  "baseBranch": "main",
+  "triggerLabels": ["factory", "orca"],
+  "eligibleTypes": ["bug", "enhancement", "feature"],
+  "statusLabels": {
+    "running": "factory-wip",
+    "blocked": "factory-blocked",
+    "needsHuman": "factory-needs-human",
+    "done": "factory-done"
+  },
+  "branchPrefix": "factory/issue-",
+  "maxAttempts": {
+    "implementValidate": 3,
+    "reviewFix": 2
+  },
+  "limits": {
+    "maxChangedFiles": 20,
+    "maxDiffLines": 800,
+    "wallClockMinutes": 90
+  },
+  "packages": [
+    {
+      "id": "web",
+      "path": ".",
+      "globs": ["index.html", "css/**", "tests/**", "package.json"],
+      "test": "npm test",
+      "lint": null
+    }
+  ]
+}

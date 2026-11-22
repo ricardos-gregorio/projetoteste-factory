@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FactoryScope",
+  "type": "object",
+  "required": ["issue", "packages", "reason", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "issue": {
+      "type": "object",
+      "required": ["number", "title", "url"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "reason": { "type": "string", "minLength": 1 },
+    "confidence": { "enum": ["high", "medium", "low"] },
+    "needsE2e": { "type": "boolean" }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FactoryJob",
+  "type": "object",
+  "required": ["runId", "issue", "state", "attempts", "startedAt"],
+  "additionalProperties": false,
+  "properties": {
+    "runId": { "type": "string", "minLength": 1 },
+    "issue": { "type": "integer", "minimum": 1 },
+    "state": {
+      "enum": [
+        "admitted",
+        "scoping",
+        "coding",
+        "gating",
+        "published",
+        "needs_human",
+        "aborted",
+        "superseded"
+      ]
+    },
+    "attempts": {
+      "type": "object",
+      "required": ["implementValidate", "reviewFix"],
+      "properties": {
+        "implementValidate": { "type": "integer", "minimum": 0 },
+        "reviewFix": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "branch": { "type": "string" },
+    "prUrl": { "type": "string" },
+    "startedAt": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "diagnosis": { "type": "string" }
+  }
+}

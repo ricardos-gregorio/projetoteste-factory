@@ -8,7 +8,10 @@
     "node": ">=21"
   },
   "scripts": {
-    "test": "node --test \"tests/**/*.test.js\""
+    "test": "node --test \"tests/**/*.test.js\"",
+    "factory:precheck": "node factory/scripts/precheck-eligible.mjs",
+    "factory:next": "node factory/scripts/next-issue.mjs",
+    "factory:test": "node factory/scripts/run-tests.mjs"
   },
   "devDependencies": {
     "jsdom": "^26.1.0"
